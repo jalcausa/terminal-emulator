@@ -591,4 +591,258 @@ class TerminalBufferTest {
             assertEquals("", buf.getLine(0));
         }
     }
+
+    // ========================================================================
+    // Screen operations
+    // ========================================================================
+
+    @Nested
+    class ScreenOperations {
+
+        @Test
+        void insertEmptyLineAtBottomScrollsScreen() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 10);
+            buf.writeText("AAAAA");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("BBBBB");
+            buf.setCursorPosition(0, 2);
+            buf.writeText("CCCCC");
+
+            buf.insertEmptyLineAtBottom();
+
+            assertEquals("BBBBB", buf.getLine(0));
+            assertEquals("CCCCC", buf.getLine(1));
+            assertEquals("", buf.getLine(2)); // new empty line
+            assertEquals(1, buf.getScrollbackSize());
+            assertEquals("AAAAA", buf.getScrollbackLine(0));
+        }
+
+        @Test
+        void insertEmptyLineAtBottomRespectsMaxScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 1);
+            buf.writeText("AAA");
+            buf.insertEmptyLineAtBottom(); // AAA → scrollback
+            buf.writeText("BBB");
+            buf.insertEmptyLineAtBottom(); // BBB → scrollback, AAA discarded
+
+            assertEquals(1, buf.getScrollbackSize());
+            assertEquals("BBB", buf.getScrollbackLine(0));
+        }
+
+        @Test
+        void clearScreenReplacesAllLinesWithEmpty() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 10);
+            buf.writeText("Hello");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("World");
+
+            buf.clearScreen();
+
+            for (int i = 0; i < 3; i++) {
+                assertEquals("", buf.getLine(i));
+            }
+        }
+
+        @Test
+        void clearScreenResetsCursor() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setCursorPosition(5, 3);
+            buf.clearScreen();
+            assertEquals(new CursorPosition(0, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void clearScreenPreservesScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            buf.writeText("AAABBB"); // scrolls, "AAA" in scrollback
+            buf.clearScreen();
+
+            assertEquals(1, buf.getScrollbackSize());
+            assertEquals("AAA", buf.getScrollbackLine(0));
+        }
+
+        @Test
+        void clearScreenAndScrollbackClearsBoth() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            buf.writeText("AAABBB"); // "AAA" in scrollback
+            buf.clearScreenAndScrollback();
+
+            assertEquals("", buf.getLine(0));
+            assertEquals(0, buf.getScrollbackSize());
+        }
+
+        @Test
+        void clearScreenAndScrollbackResetsCursor() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setCursorPosition(7, 4);
+            buf.clearScreenAndScrollback();
+            assertEquals(new CursorPosition(0, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void multipleClearScreenCalls() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("Hello");
+            buf.clearScreen();
+            buf.clearScreen();
+            buf.clearScreen();
+
+            for (int i = 0; i < 3; i++) {
+                assertEquals("", buf.getLine(i));
+            }
+            assertEquals(new CursorPosition(0, 0), buf.getCursorPosition());
+        }
+    }
+
+    // ========================================================================
+    // Content access
+    // ========================================================================
+
+    @Nested
+    class ContentAccess {
+
+        @Test
+        void getCharAtScreen() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("ABCDE");
+
+            assertEquals('A', buf.getCharAt(0, 0));
+            assertEquals('E', buf.getCharAt(4, 0));
+            assertEquals(' ', buf.getCharAt(5, 0)); // empty
+        }
+
+        @Test
+        void getCharAtThrowsOnInvalidColumn() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getCharAt(-1, 0));
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getCharAt(10, 0));
+        }
+
+        @Test
+        void getCharAtThrowsOnInvalidRow() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getCharAt(0, -1));
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getCharAt(0, 5));
+        }
+
+        @Test
+        void getAttributesAtScreen() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            TextAttributes attrs = TextAttributes.DEFAULT.withStyle(StyleFlag.BOLD);
+            buf.setCurrentAttributes(attrs);
+            buf.writeText("A");
+
+            assertEquals(attrs, buf.getAttributesAt(0, 0));
+            assertEquals(TextAttributes.DEFAULT, buf.getAttributesAt(1, 0));
+        }
+
+        @Test
+        void getLineFromScreen() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("Hello");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("World");
+
+            assertEquals("Hello", buf.getLine(0));
+            assertEquals("World", buf.getLine(1));
+            assertEquals("", buf.getLine(2));
+        }
+
+        @Test
+        void getLineThrowsOnInvalidRow() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getLine(-1));
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getLine(5));
+        }
+
+        @Test
+        void getScreenContent() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("AAAAA");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("BBB");
+
+            String expected = "AAAAA\nBBB\n";
+            assertEquals(expected, buf.getScreenContent());
+        }
+
+        @Test
+        void getScreenContentAllEmpty() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            assertEquals("\n\n", buf.getScreenContent());
+        }
+
+        @Test
+        void getScrollbackCharAt() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            buf.writeText("ABCDEF");
+            // "ABC" in scrollback (row 0), "DEF" on screen
+
+            assertEquals('A', buf.getScrollbackCharAt(0, 0));
+            assertEquals('B', buf.getScrollbackCharAt(1, 0));
+            assertEquals('C', buf.getScrollbackCharAt(2, 0));
+        }
+
+        @Test
+        void getScrollbackCharAtThrowsOnInvalidRow() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            assertThrows(IndexOutOfBoundsException.class, () -> buf.getScrollbackCharAt(0, 0));
+        }
+
+        @Test
+        void getScrollbackAttributesAt() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            TextAttributes bold = TextAttributes.DEFAULT.withStyle(StyleFlag.BOLD);
+            buf.setCurrentAttributes(bold);
+            buf.writeText("ABCDEF");
+
+            assertEquals(bold, buf.getScrollbackAttributesAt(0, 0));
+        }
+
+        @Test
+        void getScrollbackLine() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            buf.writeText("ABCDEF");
+
+            assertEquals("ABC", buf.getScrollbackLine(0));
+        }
+
+        @Test
+        void getAllContentWithScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(3, 2, 10);
+            buf.writeText("AAABBBCCCDDD");
+
+            // Scrollback: AAA, BBB  |  Screen: CCC, DDD
+            String expected = "AAA\nBBB\nCCC\nDDD";
+            assertEquals(expected, buf.getAllContent());
+        }
+
+        @Test
+        void getAllContentWithoutScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 0);
+            buf.writeText("Hello");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("World");
+
+            assertEquals("Hello\nWorld", buf.getAllContent());
+        }
+
+        @Test
+        void getAllContentEmptyBuffer() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            assertEquals("\n\n", buf.getAllContent());
+        }
+
+        @Test
+        void scrollbackSize() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 10);
+            assertEquals(0, buf.getScrollbackSize());
+
+            buf.writeText("AAABBB");
+            assertEquals(1, buf.getScrollbackSize());
+
+            buf.writeText("CCCDDD");
+            assertEquals(3, buf.getScrollbackSize());
+        }
+    }
 }
