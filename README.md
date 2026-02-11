@@ -1,6 +1,6 @@
 # Terminal Text Buffer
 
-A terminal text buffer implementation in Java — the core data structure that terminal emulators use to store and manipulate displayed text. Built as a coding task for a JetBrains internship application (IntelliJ Terminal team).
+A terminal text buffer implementation in Java — the core data structure that terminal emulators use to store and manipulate displayed text.
 
 ## Building and Testing
 
@@ -10,9 +10,25 @@ mvn compile
 
 # Run tests (177 tests)
 mvn test
+
+# Run a specific test class
+mvn test -Dtest=TerminalBufferTest
+
+# Run a specific nested test group (e.g. Resize)
+mvn test -Dtest="TerminalBufferTest\$Resize"
 ```
 
 **Requirements:** Java 17+, Maven 3.8+. No external dependencies besides JUnit 5 for testing.
+
+## Interactive Demo
+
+A `Demo` class is included to showcase the API in action — writing text, colored/styled output, CJK wide characters, scrolling, and resize:
+
+```bash
+mvn compile -q && java -cp target/classes terminal.Demo
+```
+
+You can edit `src/main/java/terminal/Demo.java` to experiment with the API.
 
 ## Architecture
 
