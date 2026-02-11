@@ -4,7 +4,6 @@ import java.util.Objects;
 
 /**
  * Represents an immutable cursor position in the terminal grid.
- * <p>
  * Both column and row are 0-indexed.
  */
 public final class CursorPosition {

@@ -5,7 +5,6 @@ import java.util.Objects;
 /**
  * Represents a terminal color, which can be either the terminal's default color
  * or one of the 16 standard ANSI colors.
- * <p>
  * This class is immutable. Use the factory methods {@link #defaultColor()} and
  * {@link #of(AnsiColor)} to create instances.
  */

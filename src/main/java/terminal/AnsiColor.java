@@ -2,7 +2,6 @@ package terminal;
 
 /**
  * The 16 standard ANSI terminal colors.
- * <p>
  * These correspond to the SGR (Select Graphic Rendition) color codes 30-37 (normal)
  * and 90-97 (bright) for foreground, and 40-47 / 100-107 for background.
  */

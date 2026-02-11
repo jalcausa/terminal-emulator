@@ -4,11 +4,9 @@ import java.util.Objects;
 
 /**
  * Represents a single cell in the terminal grid.
- * <p>
  * Each cell holds a character, its text attributes (colors and styles),
  * a display width (1 for normal characters, 2 for wide CJK characters),
  * and a placeholder flag for the trailing cell of a wide character.
- * <p>
  * This class is immutable.
  */
 public final class Cell {

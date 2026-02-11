@@ -8,7 +8,6 @@ import java.util.Set;
 /**
  * Immutable set of text attributes for a terminal cell: foreground color,
  * background color, and style flags (bold, italic, underline).
- * <p>
  * Use the builder-style methods ({@link #withForeground}, {@link #withBackground},
  * {@link #withStyle}, {@link #withoutStyle}) to derive new instances from existing ones.
  */

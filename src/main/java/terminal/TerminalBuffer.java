@@ -8,15 +8,11 @@ import java.util.List;
 /**
  * A terminal text buffer — the core data structure that terminal emulators use
  * to store and manipulate displayed text.
- * <p>
  * The buffer consists of two logical parts:
- * <ul>
- *   <li><b>Screen</b> — the last {@code height} lines that fit the screen dimensions.
- *       This is the editable area and what users see.</li>
- *   <li><b>Scrollback</b> — lines that scrolled off the top of the screen, preserved
- *       for history. These are unmodifiable through normal editing operations.</li>
- * </ul>
- * <p>
+ *   Screen — the last {@code height} lines that fit the screen dimensions.
+ *       This is the editable area and what users see.
+ *  Scrollback — lines that scrolled off the top of the screen, preserved
+ *       for history. These are unmodifiable through normal editing operations.
  * The buffer maintains a cursor position and current text attributes that are used
  * for subsequent editing operations.
  */
@@ -99,7 +95,6 @@ public final class TerminalBuffer {
 
     /**
      * Sets the cursor position, clamping to valid screen bounds.
-     * <p>
      * Column is clamped to [0, width-1] and row to [0, height-1].
      *
      * @param column the desired column (0-based)
@@ -199,7 +194,6 @@ public final class TerminalBuffer {
 
     /**
      * Writes text at the current cursor position, overriding existing content.
-     * <p>
      * Each character is written with the current attributes. The cursor advances
      * after each character. When the cursor reaches the end of a line, it wraps
      * to the beginning of the next line. When it reaches the bottom of the screen,
@@ -218,7 +212,6 @@ public final class TerminalBuffer {
     /**
      * Inserts text at the current cursor position, shifting existing content
      * to the right. Content that goes beyond the line width is discarded.
-     * <p>
      * The cursor advances after each inserted character.
      *
      * @param text the text to insert; if empty, does nothing
@@ -233,7 +226,6 @@ public final class TerminalBuffer {
     /**
      * Fills the current line (at the cursor's row) with the given character
      * using the current attributes.
-     * <p>
      * Does not move the cursor.
      *
      * @param c the character to fill with
@@ -248,7 +240,6 @@ public final class TerminalBuffer {
 
     /**
      * Inserts an empty line at the bottom of the screen.
-     * <p>
      * The top line of the screen is moved to the scrollback, and a new empty line
      * is added at the bottom. If the scrollback exceeds its maximum size, the
      * oldest line is discarded.
@@ -385,7 +376,6 @@ public final class TerminalBuffer {
 
     /**
      * Returns all content (scrollback + screen) as a string.
-     * <p>
      * Scrollback lines appear first (oldest at top), followed by screen lines.
      * Lines are separated by newlines.
      */

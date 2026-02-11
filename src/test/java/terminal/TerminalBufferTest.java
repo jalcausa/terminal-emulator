@@ -284,4 +284,154 @@ class TerminalBufferTest {
                     buf.getAttributesAt(1, 0).getForeground());
         }
     }
+
+    // ========================================================================
+    // writeText
+    // ========================================================================
+
+    @Nested
+    class WriteText {
+
+        @Test
+        void writeSimpleText() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("Hello");
+
+            assertEquals("Hello", buf.getLine(0));
+            assertEquals(new CursorPosition(5, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeEmptyStringDoesNothing() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("");
+            assertEquals("", buf.getLine(0));
+            assertEquals(new CursorPosition(0, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeOverridesExistingContent() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("AAAA");
+            buf.setCursorPosition(1, 0);
+            buf.writeText("BB");
+
+            assertEquals("ABBA", buf.getLine(0));
+        }
+
+        @Test
+        void writeExactlyFillsLine() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("12345");
+
+            assertEquals("12345", buf.getLine(0));
+            // Cursor at column 5 (past the end, will wrap on next write)
+            assertEquals(new CursorPosition(5, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeWrapsToNextLine() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("12345AB");
+
+            assertEquals("12345", buf.getLine(0));
+            assertEquals("AB", buf.getLine(1));
+            assertEquals(new CursorPosition(2, 1), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeWrapsMultipleLines() {
+            TerminalBuffer buf = new TerminalBuffer(3, 5, 0);
+            buf.writeText("ABCDEFGHI");
+
+            assertEquals("ABC", buf.getLine(0));
+            assertEquals("DEF", buf.getLine(1));
+            assertEquals("GHI", buf.getLine(2));
+        }
+
+        @Test
+        void writeScrollsWhenReachingBottom() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 10);
+            buf.writeText("AAAAABBBBBCCC");
+
+            // Screen should show last 2 lines
+            assertEquals("BBBBB", buf.getLine(0));
+            assertEquals("CCC", buf.getLine(1));
+            // First line should be in scrollback
+            assertEquals(1, buf.getScrollbackSize());
+            assertEquals("AAAAA", buf.getScrollbackLine(0));
+        }
+
+        @Test
+        void writeScrollsFillsScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(3, 2, 100);
+            // Write enough to scroll multiple times
+            buf.writeText("AAABBBCCCDDD");
+
+            assertEquals("CCC", buf.getLine(0));
+            assertEquals("DDD", buf.getLine(1));
+            assertEquals(2, buf.getScrollbackSize());
+            assertEquals("AAA", buf.getScrollbackLine(0));
+            assertEquals("BBB", buf.getScrollbackLine(1));
+        }
+
+        @Test
+        void scrollbackTrimmedWhenOverMax() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 2);
+            // Each 3 chars fills a line, then scrolls
+            buf.writeText("AAABBBCCCDDD");
+
+            assertEquals("DDD", buf.getLine(0));
+            assertEquals(2, buf.getScrollbackSize());
+            // Oldest ("AAA") should have been discarded
+            assertEquals("BBB", buf.getScrollbackLine(0));
+            assertEquals("CCC", buf.getScrollbackLine(1));
+        }
+
+        @Test
+        void writeWithZeroScrollbackDiscardsHistory() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 0);
+            buf.writeText("AAABBB");
+
+            assertEquals("BBB", buf.getLine(0));
+            assertEquals(0, buf.getScrollbackSize());
+        }
+
+        @Test
+        void writeSingleCharacter() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("X");
+
+            assertEquals('X', buf.getCharAt(0, 0));
+            assertEquals(new CursorPosition(1, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeAtSpecificCursorPosition() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setCursorPosition(3, 2);
+            buf.writeText("Hi");
+
+            assertEquals("Hi", buf.getLine(2).trim());
+            assertEquals('H', buf.getCharAt(3, 2));
+            assertEquals('i', buf.getCharAt(4, 2));
+        }
+
+        @Test
+        void writePreservesAttributesPerCell() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            TextAttributes bold = TextAttributes.DEFAULT.withStyle(StyleFlag.BOLD);
+            TextAttributes italic = TextAttributes.DEFAULT.withStyle(StyleFlag.ITALIC);
+
+            buf.setCurrentAttributes(bold);
+            buf.writeText("A");
+            buf.setCurrentAttributes(italic);
+            buf.writeText("B");
+
+            assertTrue(buf.getAttributesAt(0, 0).hasStyle(StyleFlag.BOLD));
+            assertFalse(buf.getAttributesAt(0, 0).hasStyle(StyleFlag.ITALIC));
+            assertFalse(buf.getAttributesAt(1, 0).hasStyle(StyleFlag.BOLD));
+            assertTrue(buf.getAttributesAt(1, 0).hasStyle(StyleFlag.ITALIC));
+        }
+    }
 }

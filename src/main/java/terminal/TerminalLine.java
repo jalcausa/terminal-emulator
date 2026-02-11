@@ -4,10 +4,8 @@ import java.util.Arrays;
 
 /**
  * Represents a single line (row) in the terminal buffer.
- * <p>
  * A line is a fixed-width array of {@link Cell} instances. It provides operations
  * for getting/setting individual cells, filling, clearing, and extracting text content.
- * <p>
  * This class is mutable and not thread-safe.
  */
 public final class TerminalLine {
@@ -67,7 +65,6 @@ public final class TerminalLine {
 
     /**
      * Returns the text content of this line as a string.
-     * <p>
      * Placeholder cells (trailing cells of wide characters) are skipped.
      * Trailing spaces are trimmed.
      */
@@ -114,7 +111,6 @@ public final class TerminalLine {
 
     /**
      * Resizes this line to a new width.
-     * <p>
      * If the new width is smaller, cells beyond the new width are discarded.
      * If the new width is larger, the line is extended with empty cells.
      *
