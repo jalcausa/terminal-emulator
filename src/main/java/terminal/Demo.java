@@ -167,14 +167,14 @@ public final class Demo {
                 Cell cell = buf.getCellAt(col, row);
                 if (cell.isPlaceholder()) continue; // skip wide-char trailing cell
 
-                String ch = cell.getCharacter() == ' ' && col == cursor.column() && row == cursor.row()
+                String ch = cell.getCharacter() == ' ' && col == cursor.getColumn() && row == cursor.getRow()
                         ? "▋" : String.valueOf(cell.getCharacter());
 
                 // Apply ANSI escape for color/style
                 String ansi = cellAnsi(cell);
                 if (!ansi.isEmpty()) {
                     System.out.print("\033[" + ansi + "m" + ch + "\033[0m");
-                } else if (col == cursor.column() && row == cursor.row()) {
+                } else if (col == cursor.getColumn() && row == cursor.getRow()) {
                     System.out.print("\033[7m" + ch + "\033[0m"); // invert for cursor
                 } else {
                     System.out.print(ch);
@@ -184,7 +184,7 @@ public final class Demo {
         }
         System.out.println("└" + "─".repeat(buf.getWidth()) + "┘");
         System.out.printf("Cursor: (%d, %d)  Size: %dx%d  Scrollback: %d lines%n",
-                cursor.column(), cursor.row(), buf.getWidth(), buf.getHeight(), buf.getScrollbackSize());
+                cursor.getColumn(), cursor.getRow(), buf.getWidth(), buf.getHeight(), buf.getScrollbackSize());
     }
 
     private static String cellAnsi(Cell cell) {
@@ -248,7 +248,7 @@ public final class Demo {
         CursorPosition c = buf.getCursorPosition();
         TextAttributes a = buf.getCurrentAttributes();
         System.out.println("Size:       " + buf.getWidth() + "x" + buf.getHeight());
-        System.out.println("Cursor:     (" + c.column() + ", " + c.row() + ")");
+        System.out.println("Cursor:     (" + c.getColumn() + ", " + c.getRow() + ")");
         System.out.println("Scrollback: " + buf.getScrollbackSize() + " / " + buf.getMaxScrollbackSize());
         System.out.println("Foreground: " + (a.getForeground().getAnsiColor() != null ? a.getForeground().getAnsiColor() : "default"));
         System.out.println("Background: " + (a.getBackground().getAnsiColor() != null ? a.getBackground().getAnsiColor() : "default"));
