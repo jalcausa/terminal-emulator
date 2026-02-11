@@ -310,7 +310,6 @@ public final class TerminalBuffer {
 
     /**
      * Returns the full {@link Cell} at the given screen position.
-     * <p>
      * This provides access to all cell properties including display width and
      * placeholder status, which are relevant for wide character handling.
      *
@@ -416,18 +415,14 @@ public final class TerminalBuffer {
 
     /**
      * Resizes the terminal buffer to new dimensions.
-     * <p>
-     * <b>Width change:</b> Each line (screen and scrollback) is resized. If a wide
+     * Width change: Each line (screen and scrollback) is resized. If a wide
      * character straddles the new right boundary (its main cell is at the last column
      * but its placeholder would be truncated), it is replaced with an empty cell.
-     * <p>
-     * <b>Height decrease:</b> Excess top lines are pushed into the scrollback
+     * Height decrease: Excess top lines are pushed into the scrollback
      * (subject to the scrollback size limit). The cursor row is adjusted accordingly.
-     * <p>
-     * <b>Height increase:</b> Lines are recovered from scrollback (most recent first)
+     * Height increase: Lines are recovered from scrollback (most recent first)
      * and prepended to the screen. Any remaining rows are added as empty lines at the
      * bottom. The cursor row is adjusted to account for recovered scrollback lines.
-     * <p>
      * After resizing, the cursor is clamped to valid bounds.
      *
      * @param newWidth  new number of columns; must be at least 1

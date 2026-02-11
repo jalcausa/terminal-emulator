@@ -2,10 +2,8 @@ package terminal;
 
 /**
  * Utility class for determining the display width of characters in a terminal.
- * <p>
  * In terminals, most characters occupy 1 column, but certain characters
  * (CJK ideographs, fullwidth forms, and some symbols) occupy 2 columns.
- * <p>
  * This implementation covers the most common wide character ranges without
  * relying on external libraries.
  */
