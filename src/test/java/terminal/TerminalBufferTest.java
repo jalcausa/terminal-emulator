@@ -1014,4 +1014,141 @@ class TerminalBufferTest {
             assertEquals("CCCCC", buf.getScrollbackLine(1));
         }
     }
+
+    // ========================================================================
+    // Wide character support (bonus)
+    // ========================================================================
+
+    @Nested
+    class WideCharacters {
+
+        @Test
+        void writeWideCharacterOccupiesTwoCells() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("中");
+
+            assertEquals('中', buf.getCharAt(0, 0));
+            // Main cell should have displayWidth 2
+            assertEquals(2, buf.getCellAt(0, 0).getDisplayWidth());
+            // Second cell should be a placeholder
+            assertTrue(buf.getCellAt(1, 0).isPlaceholder());
+            // Cursor should advance by 2
+            assertEquals(new CursorPosition(2, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeWideCharGetText() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("中文");
+
+            assertEquals("中文", buf.getLine(0));
+        }
+
+        @Test
+        void writeWideCharactersMixedWithNarrow() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("A中B");
+
+            assertEquals("A中B", buf.getLine(0));
+            // A=1col, 中=2cols, B=1col → total 4 columns used
+            assertEquals(new CursorPosition(4, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void wideCharWrapsWhenAtPenultimateColumn() {
+            // Width 5: if cursor at col 4, wide char doesn't fit (needs 2 cells)
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("ABCD");  // cursor at col 4
+            buf.writeText("中");    // doesn't fit, should wrap
+
+            assertEquals("ABCD", buf.getLine(0));  // col 4 filled with space (trimmed)
+            assertEquals("中", buf.getLine(1));
+        }
+
+        @Test
+        void wideCharAtExactEndOfLine() {
+            // Width 6, cursor at 4 → 2 cells left → wide char fits exactly
+            TerminalBuffer buf = new TerminalBuffer(6, 3, 0);
+            buf.writeText("ABCD");  // cursor at col 4
+            buf.writeText("中");    // fits in cols 4-5
+
+            assertEquals("ABCD中", buf.getLine(0));
+            assertEquals(new CursorPosition(6, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void overwriteWideCharWithNarrowClearsBothCells() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("中");  // occupies cols 0-1
+            buf.setCursorPosition(0, 0);
+            buf.writeText("A");   // overwrite main cell
+
+            assertEquals('A', buf.getCharAt(0, 0));
+            assertEquals(' ', buf.getCharAt(1, 0)); // placeholder cleared
+            assertFalse(buf.getCellAt(1, 0).isPlaceholder());
+        }
+
+        @Test
+        void overwritePlaceholderClearsWideChar() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("中");  // occupies cols 0-1
+            buf.setCursorPosition(1, 0);
+            buf.writeText("X");   // overwrite placeholder
+
+            assertEquals(' ', buf.getCharAt(0, 0)); // main cell cleared
+            assertEquals('X', buf.getCharAt(1, 0));
+        }
+
+        @Test
+        void multipleWideCharacters() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("你好世界");  // 4 wide chars = 8 columns
+
+            assertEquals("你好世界", buf.getLine(0));
+            assertEquals(new CursorPosition(8, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void wideCharScrollsScreen() {
+            TerminalBuffer buf = new TerminalBuffer(4, 2, 10);
+            buf.writeText("AB中CD");
+            // AB at row 0 cols 0-1; 中 needs 2 cols, cursor at 2, fits at 2-3
+            // then C wraps to row 1 col 0, D at row 1 col 1
+            assertEquals("AB中", buf.getLine(0));
+            assertEquals("CD", buf.getLine(1));
+        }
+
+        @Test
+        void charWidthDetectsCJK() {
+            assertTrue(CharWidth.isWide('中'));   // CJK Unified Ideograph
+            assertTrue(CharWidth.isWide('文'));   // CJK Unified Ideograph
+            assertTrue(CharWidth.isWide('你'));   // CJK Unified Ideograph
+            assertTrue(CharWidth.isWide('Ａ'));   // Fullwidth Latin A (U+FF21)
+            assertFalse(CharWidth.isWide('A'));   // ASCII
+            assertFalse(CharWidth.isWide(' '));   // Space
+            assertFalse(CharWidth.isWide('é'));   // Latin with accent
+        }
+
+        @Test
+        void wideCharInMinimumWidthBuffer() {
+            // Buffer width 2: wide char fits exactly
+            TerminalBuffer buf = new TerminalBuffer(2, 2, 0);
+            buf.writeText("中");
+
+            assertEquals("中", buf.getLine(0));
+            assertEquals(new CursorPosition(2, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void wideCharInWidth1BufferWraps() {
+            // Buffer width 1: wide char can never fit, writes space & wraps continuously
+            TerminalBuffer buf = new TerminalBuffer(1, 3, 0);
+            buf.writeText("中");
+
+            // Wide char needs 2 cols, but width is 1. It loops wrapping.
+            // This is a degenerate case — just verify it doesn't throw/hang.
+            assertNotNull(buf.getLine(0));
+        }
+
+    }
 }

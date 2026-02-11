@@ -309,6 +309,21 @@ public final class TerminalBuffer {
     }
 
     /**
+     * Returns the full {@link Cell} at the given screen position.
+     * <p>
+     * This provides access to all cell properties including display width and
+     * placeholder status, which are relevant for wide character handling.
+     *
+     * @param column 0-based column
+     * @param row    0-based row (0 = first visible line)
+     * @throws IndexOutOfBoundsException if position is out of range
+     */
+    public Cell getCellAt(int column, int row) {
+        checkScreenBounds(column, row);
+        return screen.get(row).getCell(column);
+    }
+
+    /**
      * Returns the entire screen content as a string with lines separated by newlines.
      * Trailing spaces on each line are trimmed.
      */
@@ -401,9 +416,11 @@ public final class TerminalBuffer {
 
     /**
      * Writes a single character at the cursor position, advancing the cursor.
-     * Handles line wrapping and screen scrolling.
+     * Handles line wrapping, screen scrolling, and wide characters.
      */
     private void writeCharacter(char c) {
+        int charWidth = CharWidth.displayWidth(c);
+
         // If cursor is beyond the last column after a previous write, wrap first
         if (cursorColumn >= width) {
             cursorColumn = 0;
@@ -414,8 +431,39 @@ public final class TerminalBuffer {
             }
         }
 
-        screen.get(cursorRow).setCell(cursorColumn, new Cell(c, currentAttributes));
-        cursorColumn++;
+        if (charWidth == 2) {
+            // Wide character needs 2 columns
+            if (width < 2) {
+                // Buffer too narrow for wide characters — write a space as fallback
+                screen.get(cursorRow).setCell(cursorColumn, Cell.EMPTY);
+                cursorColumn++;
+                return;
+            }
+            if (cursorColumn == width - 1) {
+                // Not enough room on this line — fill current cell with space and wrap
+                screen.get(cursorRow).setCell(cursorColumn, Cell.EMPTY);
+                cursorColumn = 0;
+                cursorRow++;
+                if (cursorRow >= height) {
+                    scrollUp();
+                    cursorRow = height - 1;
+                }
+            }
+            // Clear any wide character/placeholder that we're overwriting
+            clearWideCharAt(cursorRow, cursorColumn);
+            clearWideCharAt(cursorRow, cursorColumn + 1);
+
+            screen.get(cursorRow).setCell(cursorColumn,
+                    new Cell(c, currentAttributes, 2, false));
+            screen.get(cursorRow).setCell(cursorColumn + 1,
+                    new Cell(' ', currentAttributes, 1, true));
+            cursorColumn += 2;
+        } else {
+            // Normal single-width character
+            clearWideCharAt(cursorRow, cursorColumn);
+            screen.get(cursorRow).setCell(cursorColumn, new Cell(c, currentAttributes));
+            cursorColumn++;
+        }
     }
 
     /**
@@ -433,12 +481,66 @@ public final class TerminalBuffer {
         }
 
         TerminalLine line = screen.get(cursorRow);
-        // Shift cells to the right from the end
-        for (int col = width - 1; col > cursorColumn; col--) {
-            line.setCell(col, line.getCell(col - 1));
+        int charWidth = CharWidth.displayWidth(c);
+
+        if (charWidth == 2 && width < 2) {
+            // Buffer too narrow for wide characters — write a space as fallback
+            line.setCell(cursorColumn, Cell.EMPTY);
+            cursorColumn++;
+            return;
         }
-        line.setCell(cursorColumn, new Cell(c, currentAttributes));
-        cursorColumn++;
+
+        if (charWidth == 2 && cursorColumn == width - 1) {
+            // Wide char at last column: fill with space and wrap
+            line.setCell(cursorColumn, Cell.EMPTY);
+            cursorColumn = 0;
+            cursorRow++;
+            if (cursorRow >= height) {
+                scrollUp();
+                cursorRow = height - 1;
+            }
+            line = screen.get(cursorRow);
+        }
+
+        if (charWidth == 2) {
+            // Shift cells right by 2
+            for (int col = width - 1; col > cursorColumn + 1; col--) {
+                line.setCell(col, line.getCell(col - 2));
+            }
+            line.setCell(cursorColumn, new Cell(c, currentAttributes, 2, false));
+            line.setCell(cursorColumn + 1, new Cell(' ', currentAttributes, 1, true));
+            cursorColumn += 2;
+        } else {
+            // Shift cells right by 1
+            for (int col = width - 1; col > cursorColumn; col--) {
+                line.setCell(col, line.getCell(col - 1));
+            }
+            line.setCell(cursorColumn, new Cell(c, currentAttributes));
+            cursorColumn++;
+        }
+    }
+
+    /**
+     * When overwriting a cell that is part of a wide character (either the main cell
+     * or its placeholder), clears both cells to avoid rendering artifacts.
+     */
+    private void clearWideCharAt(int row, int col) {
+        if (col < 0 || col >= width) return;
+        TerminalLine line = screen.get(row);
+        Cell cell = line.getCell(col);
+        if (cell.getDisplayWidth() == 2 && !cell.isPlaceholder()) {
+            // This is the main cell of a wide char; clear both it and its placeholder
+            line.setCell(col, Cell.EMPTY);
+            if (col + 1 < width) {
+                line.setCell(col + 1, Cell.EMPTY);
+            }
+        } else if (cell.isPlaceholder()) {
+            // This is the placeholder; clear both the main cell (to the left) and this
+            line.setCell(col, Cell.EMPTY);
+            if (col - 1 >= 0) {
+                line.setCell(col - 1, Cell.EMPTY);
+            }
+        }
     }
 
     /**
