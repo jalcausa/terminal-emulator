@@ -411,6 +411,99 @@ public final class TerminalBuffer {
     }
 
     // ========================================================================
+    // Resize
+    // ========================================================================
+
+    /**
+     * Resizes the terminal buffer to new dimensions.
+     * <p>
+     * <b>Width change:</b> Each line (screen and scrollback) is resized. If a wide
+     * character straddles the new right boundary (its main cell is at the last column
+     * but its placeholder would be truncated), it is replaced with an empty cell.
+     * <p>
+     * <b>Height decrease:</b> Excess top lines are pushed into the scrollback
+     * (subject to the scrollback size limit). The cursor row is adjusted accordingly.
+     * <p>
+     * <b>Height increase:</b> Lines are recovered from scrollback (most recent first)
+     * and prepended to the screen. Any remaining rows are added as empty lines at the
+     * bottom. The cursor row is adjusted to account for recovered scrollback lines.
+     * <p>
+     * After resizing, the cursor is clamped to valid bounds.
+     *
+     * @param newWidth  new number of columns; must be at least 1
+     * @param newHeight new number of visible rows; must be at least 1
+     * @throws IllegalArgumentException if newWidth or newHeight is less than 1
+     */
+    public void resize(int newWidth, int newHeight) {
+        if (newWidth < 1) {
+            throw new IllegalArgumentException("Width must be at least 1, got: " + newWidth);
+        }
+        if (newHeight < 1) {
+            throw new IllegalArgumentException("Height must be at least 1, got: " + newHeight);
+        }
+
+        // --- Handle width change ---
+        if (newWidth != width) {
+            for (TerminalLine line : screen) {
+                resizeLineWidth(line, newWidth);
+            }
+            for (TerminalLine line : scrollback) {
+                resizeLineWidth(line, newWidth);
+            }
+            width = newWidth;
+        }
+
+        // --- Handle height change ---
+        if (newHeight < height) {
+            // Height decreased: move excess top screen lines to scrollback
+            int linesToRemove = height - newHeight;
+            for (int i = 0; i < linesToRemove; i++) {
+                TerminalLine topLine = screen.remove(0);
+                if (maxScrollbackSize > 0) {
+                    scrollback.addLast(topLine);
+                    while (scrollback.size() > maxScrollbackSize) {
+                        scrollback.removeFirst();
+                    }
+                }
+            }
+            cursorRow -= linesToRemove;
+            height = newHeight;
+        } else if (newHeight > height) {
+            // Height increased: recover lines from scrollback, add empty at bottom
+            int linesToAdd = newHeight - height;
+            int fromScrollback = Math.min(linesToAdd, scrollback.size());
+            for (int i = 0; i < fromScrollback; i++) {
+                TerminalLine line = scrollback.removeLast();
+                screen.add(0, line);
+            }
+            for (int i = fromScrollback; i < linesToAdd; i++) {
+                screen.add(new TerminalLine(width));
+            }
+            cursorRow += fromScrollback;
+            height = newHeight;
+        }
+
+        // Clamp cursor to new bounds
+        cursorColumn = clamp(cursorColumn, 0, width - 1);
+        cursorRow = clamp(cursorRow, 0, height - 1);
+    }
+
+    /**
+     * Resizes a single line, cleaning up any wide character that would be
+     * split by the new boundary before truncation.
+     */
+    private void resizeLineWidth(TerminalLine line, int newWidth) {
+        if (newWidth < line.getWidth()) {
+            // Check if a wide character's main cell sits at the new last column
+            Cell cellAtBoundary = line.getCell(newWidth - 1);
+            if (cellAtBoundary.getDisplayWidth() == 2 && !cellAtBoundary.isPlaceholder()) {
+                line.setCell(newWidth - 1, Cell.EMPTY);
+            }
+        }
+        line.resize(newWidth);
+    }
+
+    // ========================================================================
     // Private helpers
     // ========================================================================
 

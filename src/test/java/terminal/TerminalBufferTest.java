@@ -1151,4 +1151,349 @@ class TerminalBufferTest {
         }
 
     }
+
+    // ========================================================================
+    // Resize
+    // ========================================================================
+
+    @Nested
+    class Resize {
+
+        @Test
+        void resizeToSameDimensionsIsNoOp() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 100);
+            buf.writeText("Hello");
+            buf.resize(10, 5);
+
+            assertEquals(10, buf.getWidth());
+            assertEquals(5, buf.getHeight());
+            assertEquals("Hello", buf.getLine(0));
+            assertEquals(new CursorPosition(5, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void resizeInvalidWidthThrows() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            assertThrows(IllegalArgumentException.class, () -> buf.resize(0, 5));
+        }
+
+        @Test
+        void resizeInvalidHeightThrows() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            assertThrows(IllegalArgumentException.class, () -> buf.resize(10, 0));
+        }
+
+        // --- Width changes ---
+
+        @Test
+        void increaseWidthExtendsLinesWithEmptyCells() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 0);
+            buf.writeText("ABC");
+            buf.resize(10, 2);
+
+            assertEquals(10, buf.getWidth());
+            assertEquals("ABC", buf.getLine(0));
+            // Can write into the extended area
+            buf.setCursorPosition(7, 0);
+            buf.writeText("XY");
+            assertEquals("ABC    XY", buf.getLine(0));
+        }
+
+        @Test
+        void decreaseWidthTruncatesLines() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 0);
+            buf.writeText("ABCDEFGHIJ");
+            buf.resize(5, 2);
+
+            assertEquals(5, buf.getWidth());
+            assertEquals("ABCDE", buf.getLine(0));
+        }
+
+        @Test
+        void decreaseWidthClampsCursorColumn() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 0);
+            buf.setCursorPosition(8, 0);
+            buf.resize(5, 2);
+
+            assertEquals(new CursorPosition(4, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void decreaseWidthCleansUpSplitWideCharacter() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 0);
+            // Write "AB中DE": A(0) B(1) 中(2-3) D(4) E(5)
+            buf.writeText("AB中DE");
+            // Resize to width 3: cells 0,1,2 kept. Cell 2 is wide char main
+            // cell whose placeholder at 3 would be truncated → replaced with EMPTY
+            buf.resize(3, 2);
+
+            assertEquals("AB", buf.getLine(0));
+        }
+
+        @Test
+        void decreaseWidthKeepsIntactWideCharacter() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 0);
+            // Write "AB中DE": A(0) B(1) 中(2-3) D(4) E(5)
+            buf.writeText("AB中DE");
+            // Resize to width 4: cells 0-3 kept. Wide char at 2-3 is intact.
+            buf.resize(4, 2);
+
+            assertEquals("AB中", buf.getLine(0));
+        }
+
+        @Test
+        void widthChangeResizesScrollbackLines() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 10);
+            buf.writeText("FIRST LINE");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("SECOND");
+            // Scroll so "FIRST LINE" goes to scrollback
+            buf.insertEmptyLineAtBottom();
+            assertEquals(1, buf.getScrollbackSize());
+            assertEquals("FIRST LINE", buf.getScrollbackLine(0));
+
+            buf.resize(5, 2);
+            assertEquals("FIRST", buf.getScrollbackLine(0));
+        }
+
+        // --- Height changes ---
+
+        @Test
+        void decreaseHeightMovesTopLinesToScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 100);
+            buf.writeText("LINE-0");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("LINE-1");
+            buf.setCursorPosition(0, 2);
+            buf.writeText("LINE-2");
+            buf.setCursorPosition(0, 3);
+            buf.writeText("LINE-3");
+            buf.setCursorPosition(0, 4);
+            buf.writeText("LINE-4");
+
+            buf.resize(10, 3);
+
+            assertEquals(3, buf.getHeight());
+            // Top 2 lines pushed to scrollback
+            assertEquals(2, buf.getScrollbackSize());
+            assertEquals("LINE-0", buf.getScrollbackLine(0));
+            assertEquals("LINE-1", buf.getScrollbackLine(1));
+            // Remaining screen lines
+            assertEquals("LINE-2", buf.getLine(0));
+            assertEquals("LINE-3", buf.getLine(1));
+            assertEquals("LINE-4", buf.getLine(2));
+        }
+
+        @Test
+        void decreaseHeightAdjustsCursorRow() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 100);
+            buf.setCursorPosition(3, 4); // last row
+            buf.resize(10, 3);
+
+            // Cursor row was 4, 2 lines removed from top → 4-2=2
+            assertEquals(new CursorPosition(3, 2), buf.getCursorPosition());
+        }
+
+        @Test
+        void decreaseHeightClampsCursorIfAboveNewScreen() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 100);
+            buf.setCursorPosition(3, 1); // row 1
+            buf.resize(10, 2);
+
+            // Row was 1, 3 lines removed → 1-3=-2, clamped to 0
+            assertEquals(new CursorPosition(3, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void decreaseHeightRespectsScrollbackLimit() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 2);
+            buf.writeText("LINE-0");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("LINE-1");
+            buf.setCursorPosition(0, 2);
+            buf.writeText("LINE-2");
+            buf.setCursorPosition(0, 3);
+            buf.writeText("LINE-3");
+
+            buf.resize(10, 2);
+
+            // 3 lines pushed to scrollback, but maxScrollbackSize=2 → oldest evicted
+            assertEquals(2, buf.getScrollbackSize());
+            assertEquals("LINE-1", buf.getScrollbackLine(0));
+            assertEquals("LINE-2", buf.getScrollbackLine(1));
+        }
+
+        @Test
+        void increaseHeightRecoversFromScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 100);
+            // Build up scrollback by writing lines then scrolling them off
+            buf.setCursorPosition(0, 0);
+            buf.writeText("LINE-0");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("LINE-1");
+            buf.insertEmptyLineAtBottom();    // LINE-0 → scrollback
+            buf.setCursorPosition(0, 1);
+            buf.writeText("LINE-2");
+            buf.insertEmptyLineAtBottom();    // LINE-1 → scrollback
+            buf.setCursorPosition(0, 1);
+            buf.writeText("LINE-3");
+
+            assertEquals(2, buf.getScrollbackSize());
+            assertEquals("LINE-0", buf.getScrollbackLine(0));
+            assertEquals("LINE-1", buf.getScrollbackLine(1));
+
+            // Increase height to 4 — should recover 2 lines from scrollback
+            buf.resize(10, 4);
+
+            assertEquals(4, buf.getHeight());
+            assertEquals(0, buf.getScrollbackSize());
+            assertEquals("LINE-0", buf.getLine(0));
+            assertEquals("LINE-1", buf.getLine(1));
+            assertEquals("LINE-2", buf.getLine(2));
+            assertEquals("LINE-3", buf.getLine(3));
+        }
+
+        @Test
+        void increaseHeightRecoversPartialScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 100);
+            buf.setCursorPosition(0, 0);
+            buf.writeText("LINE-0");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("LINE-1");
+            buf.insertEmptyLineAtBottom();  // LINE-0 → scrollback
+            assertEquals(1, buf.getScrollbackSize());
+
+            // Increase by 3 rows → only 1 line from scrollback, 2 empty at bottom
+            buf.resize(10, 5);
+
+            assertEquals(5, buf.getHeight());
+            assertEquals(0, buf.getScrollbackSize());
+            assertEquals("LINE-0", buf.getLine(0));
+            assertEquals("LINE-1", buf.getLine(1));
+            assertEquals("", buf.getLine(2));
+            assertEquals("", buf.getLine(3));
+            assertEquals("", buf.getLine(4));
+        }
+
+        @Test
+        void increaseHeightNoScrollbackAddsEmptyLines() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 0);
+            buf.writeText("Hello");
+
+            buf.resize(10, 5);
+
+            assertEquals(5, buf.getHeight());
+            assertEquals("Hello", buf.getLine(0));
+            assertEquals("", buf.getLine(2));
+            assertEquals("", buf.getLine(3));
+            assertEquals("", buf.getLine(4));
+        }
+
+        @Test
+        void increaseHeightAdjustsCursorRow() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 100);
+            buf.setCursorPosition(0, 0);
+            buf.writeText("SCROLLOFF");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("VISIBLE");
+            buf.insertEmptyLineAtBottom();  // SCROLLOFF → scrollback
+            // Cursor stays at (7, 1). 1 line in scrollback.
+            assertEquals(new CursorPosition(7, 1), buf.getCursorPosition());
+
+            buf.resize(10, 4);
+            // 1 line recovered from scrollback → cursor row shifts down by 1
+            assertEquals(new CursorPosition(7, 2), buf.getCursorPosition());
+        }
+
+        // --- Combined changes ---
+
+        @Test
+        void resizeBothDimensionsSimultaneously() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 100);
+            buf.writeText("ABCDEFGHIJ");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("1234567890");
+            buf.setCursorPosition(9, 4);
+
+            buf.resize(5, 3);
+
+            assertEquals(5, buf.getWidth());
+            assertEquals(3, buf.getHeight());
+            // Top 2 lines pushed to scrollback (truncated to width 5)
+            assertEquals(2, buf.getScrollbackSize());
+            assertEquals("ABCDE", buf.getScrollbackLine(0));
+            assertEquals("12345", buf.getScrollbackLine(1));
+            // Cursor was at (9, 4). Width→5 clamps column to 4. 2 lines removed, row 4-2=2.
+            assertEquals(new CursorPosition(4, 2), buf.getCursorPosition());
+        }
+
+        @Test
+        void resizePreservesAttributes() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 0);
+            TextAttributes attrs = TextAttributes.DEFAULT
+                    .withForeground(TerminalColor.of(AnsiColor.RED))
+                    .withStyle(StyleFlag.BOLD);
+            buf.setCurrentAttributes(attrs);
+            buf.writeText("Hi");
+
+            buf.resize(5, 3);
+
+            assertEquals(attrs, buf.getAttributesAt(0, 0));
+            assertEquals(attrs, buf.getAttributesAt(1, 0));
+        }
+
+        @Test
+        void resizeDownThenUpRestoresFromScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(10, 4, 100);
+            buf.writeText("AAA");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("BBB");
+            buf.setCursorPosition(0, 2);
+            buf.writeText("CCC");
+            buf.setCursorPosition(0, 3);
+            buf.writeText("DDD");
+
+            // Shrink to 2 rows: AAA, BBB go to scrollback
+            buf.resize(10, 2);
+            assertEquals("CCC", buf.getLine(0));
+            assertEquals("DDD", buf.getLine(1));
+            assertEquals(2, buf.getScrollbackSize());
+
+            // Expand back to 4: AAA, BBB recovered from scrollback
+            buf.resize(10, 4);
+            assertEquals("AAA", buf.getLine(0));
+            assertEquals("BBB", buf.getLine(1));
+            assertEquals("CCC", buf.getLine(2));
+            assertEquals("DDD", buf.getLine(3));
+            assertEquals(0, buf.getScrollbackSize());
+        }
+
+        @Test
+        void resizeToHeight1() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 100);
+            buf.writeText("FIRST");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("SECOND");
+            buf.setCursorPosition(0, 2);
+            buf.writeText("THIRD");
+
+            buf.resize(10, 1);
+
+            assertEquals(1, buf.getHeight());
+            assertEquals("THIRD", buf.getLine(0));
+            assertEquals(2, buf.getScrollbackSize());
+        }
+
+        @Test
+        void resizeWidthWithWideCharsInScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(10, 2, 10);
+            buf.writeText("AB中CD");         // A(0)B(1)中(2-3)C(4)D(5)
+            buf.insertEmptyLineAtBottom();    // line goes to scrollback
+
+            buf.resize(3, 2);
+
+            // Scrollback line truncated to 3 cols; wide char at col 2 is split → EMPTY
+            assertEquals("AB", buf.getScrollbackLine(0));
+        }
+    }
 }
