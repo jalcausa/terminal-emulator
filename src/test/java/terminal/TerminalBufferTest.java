@@ -188,4 +188,100 @@ class TerminalBufferTest {
             assertEquals(new CursorPosition(3, 3), buf.getCursorPosition());
         }
     }
+
+    // ========================================================================
+    // Attribute management
+    // ========================================================================
+
+    @Nested
+    class AttributeManagement {
+
+        @Test
+        void initialAttributesAreDefault() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            assertEquals(TextAttributes.DEFAULT, buf.getCurrentAttributes());
+        }
+
+        @Test
+        void setCurrentAttributes() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            TextAttributes attrs = TextAttributes.DEFAULT
+                    .withForeground(TerminalColor.of(AnsiColor.RED))
+                    .withStyle(StyleFlag.BOLD);
+            buf.setCurrentAttributes(attrs);
+            assertEquals(attrs, buf.getCurrentAttributes());
+        }
+
+        @Test
+        void setForeground() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setForeground(TerminalColor.of(AnsiColor.GREEN));
+
+            assertEquals(TerminalColor.of(AnsiColor.GREEN),
+                    buf.getCurrentAttributes().getForeground());
+            assertTrue(buf.getCurrentAttributes().getBackground().isDefault());
+        }
+
+        @Test
+        void setBackground() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setBackground(TerminalColor.of(AnsiColor.BLUE));
+
+            assertTrue(buf.getCurrentAttributes().getForeground().isDefault());
+            assertEquals(TerminalColor.of(AnsiColor.BLUE),
+                    buf.getCurrentAttributes().getBackground());
+        }
+
+        @Test
+        void addAndRemoveStyle() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.addStyle(StyleFlag.BOLD);
+            buf.addStyle(StyleFlag.ITALIC);
+
+            assertTrue(buf.getCurrentAttributes().hasStyle(StyleFlag.BOLD));
+            assertTrue(buf.getCurrentAttributes().hasStyle(StyleFlag.ITALIC));
+
+            buf.removeStyle(StyleFlag.BOLD);
+            assertFalse(buf.getCurrentAttributes().hasStyle(StyleFlag.BOLD));
+            assertTrue(buf.getCurrentAttributes().hasStyle(StyleFlag.ITALIC));
+        }
+
+        @Test
+        void resetAttributes() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setForeground(TerminalColor.of(AnsiColor.RED));
+            buf.addStyle(StyleFlag.BOLD);
+
+            buf.resetAttributes();
+
+            assertEquals(TextAttributes.DEFAULT, buf.getCurrentAttributes());
+        }
+
+        @Test
+        void attributesAreUsedWhenWriting() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            TextAttributes attrs = TextAttributes.DEFAULT
+                    .withForeground(TerminalColor.of(AnsiColor.YELLOW))
+                    .withStyle(StyleFlag.UNDERLINE);
+            buf.setCurrentAttributes(attrs);
+            buf.writeText("A");
+
+            assertEquals(attrs, buf.getAttributesAt(0, 0));
+        }
+
+        @Test
+        void changingAttributesMidWrite() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setForeground(TerminalColor.of(AnsiColor.RED));
+            buf.writeText("A");
+
+            buf.setForeground(TerminalColor.of(AnsiColor.BLUE));
+            buf.writeText("B");
+
+            assertEquals(TerminalColor.of(AnsiColor.RED),
+                    buf.getAttributesAt(0, 0).getForeground());
+            assertEquals(TerminalColor.of(AnsiColor.BLUE),
+                    buf.getAttributesAt(1, 0).getForeground());
+        }
+    }
 }
