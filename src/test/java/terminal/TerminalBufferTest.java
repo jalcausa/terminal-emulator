@@ -434,4 +434,161 @@ class TerminalBufferTest {
             assertTrue(buf.getAttributesAt(1, 0).hasStyle(StyleFlag.ITALIC));
         }
     }
+
+    // ========================================================================
+    // insertText
+    // ========================================================================
+
+    @Nested
+    class InsertText {
+
+        @Test
+        void insertOnEmptyLine() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.insertText("Hi");
+
+            assertEquals("Hi", buf.getLine(0));
+            assertEquals(new CursorPosition(2, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void insertShiftsExistingContent() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("ABCD");
+            buf.setCursorPosition(1, 0);
+            buf.insertText("XY");
+
+            // Original: ABCD______
+            // After insert at col 1: AXYBCD____
+            assertEquals("AXYBCD", buf.getLine(0));
+        }
+
+        @Test
+        void insertTruncatesContentBeyondWidth() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("ABCDE");
+            buf.setCursorPosition(0, 0);
+            buf.insertText("XY");
+
+            // Original: ABCDE
+            // Insert XY at 0: XYABC (DE pushed off)
+            assertEquals("XYABC", buf.getLine(0));
+        }
+
+        @Test
+        void insertEmptyStringDoesNothing() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("Test");
+            CursorPosition before = buf.getCursorPosition();
+            buf.setCursorPosition(0, 0);
+            buf.insertText("");
+            assertEquals("Test", buf.getLine(0));
+        }
+
+        @Test
+        void insertAtEndOfLineActsLikeWrite() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("AB");
+            // Cursor is at col 2
+            buf.insertText("CD");
+
+            assertEquals("ABCD", buf.getLine(0));
+        }
+
+        @Test
+        void insertUsesCurrentAttributes() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("AB");
+            buf.setCursorPosition(1, 0);
+
+            buf.setCurrentAttributes(TextAttributes.DEFAULT.withStyle(StyleFlag.BOLD));
+            buf.insertText("X");
+
+            // X at column 1 should be bold
+            assertTrue(buf.getAttributesAt(1, 0).hasStyle(StyleFlag.BOLD));
+            // A at column 0 should not be bold
+            assertFalse(buf.getAttributesAt(0, 0).hasStyle(StyleFlag.BOLD));
+        }
+
+        @Test
+        void insertWrapsToNextLineWhenCursorAtEnd() {
+            TerminalBuffer buf = new TerminalBuffer(3, 3, 0);
+            buf.writeText("ABC");
+            // Cursor is at col 3 (past end), next insert wraps
+            buf.insertText("XY");
+
+            assertEquals("ABC", buf.getLine(0));
+            assertEquals("XY", buf.getLine(1));
+        }
+    }
+
+    // ========================================================================
+    // fillLine
+    // ========================================================================
+
+    @Nested
+    class FillLine {
+
+        @Test
+        void fillLineWithCharacter() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.fillLine('X');
+
+            assertEquals("XXXXX", buf.getLine(0));
+        }
+
+        @Test
+        void fillLineUsesCurrentAttributes() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            TextAttributes attrs = TextAttributes.DEFAULT
+                    .withForeground(TerminalColor.of(AnsiColor.GREEN));
+            buf.setCurrentAttributes(attrs);
+            buf.fillLine('#');
+
+            for (int col = 0; col < 5; col++) {
+                assertEquals('#', buf.getCharAt(col, 0));
+                assertEquals(attrs, buf.getAttributesAt(col, 0));
+            }
+        }
+
+        @Test
+        void fillLineOnSpecificRow() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.setCursorPosition(0, 2);
+            buf.fillLine('=');
+
+            assertEquals("", buf.getLine(0)); // row 0 untouched
+            assertEquals("=====", buf.getLine(2));
+        }
+
+        @Test
+        void fillLineDoesNotMoveCursor() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.setCursorPosition(2, 1);
+            buf.fillLine('Z');
+
+            assertEquals(new CursorPosition(2, 1), buf.getCursorPosition());
+        }
+
+        @Test
+        void fillLineOverridesExistingContent() {
+            TerminalBuffer buf = new TerminalBuffer(5, 3, 0);
+            buf.writeText("Hello");
+            buf.setCursorPosition(0, 0);
+            buf.fillLine(' ');
+
+            assertEquals("", buf.getLine(0)); // all spaces = empty after trim
+        }
+
+        @Test
+        void fillLineWithSpace() {
+            TerminalBuffer buf = new TerminalBuffer(3, 2, 0);
+            buf.writeText("ABC");
+            buf.setCursorPosition(0, 0);
+            buf.fillLine(' ');
+
+            // All spaces, getText trims trailing spaces → ""
+            assertEquals("", buf.getLine(0));
+        }
+    }
 }
