@@ -69,17 +69,17 @@ Cell (immutable)
 
 ### Core Classes
 
-| Class | Responsibility |
-|---|---|
-| `Cell` | Immutable character + attributes + width metadata |
-| `TerminalLine` | Mutable row of cells; get/set/fill/clear/resize |
+| Class            | Responsibility                                            |
+| ---------------- | --------------------------------------------------------- |
+| `Cell`           | Immutable character + attributes + width metadata         |
+| `TerminalLine`   | Mutable row of cells; get/set/fill/clear/resize           |
 | `TerminalBuffer` | Main API — cursor, attributes, editing, screen/scrollback |
-| `TextAttributes` | Immutable fg/bg color + style flags, builder pattern |
-| `TerminalColor` | Wraps an optional `AnsiColor` (null = default) |
-| `AnsiColor` | Enum of 16 standard ANSI colors |
-| `StyleFlag` | Enum: `BOLD`, `ITALIC`, `UNDERLINE` |
-| `CursorPosition` | Immutable `(column, row)` value |
-| `CharWidth` | Static utility for wide character detection (CJK ranges) |
+| `TextAttributes` | Immutable fg/bg color + style flags, builder pattern      |
+| `TerminalColor`  | Wraps an optional `AnsiColor` (null = default)            |
+| `AnsiColor`      | Enum of 16 standard ANSI colors                           |
+| `StyleFlag`      | Enum: `BOLD`, `ITALIC`, `UNDERLINE`                       |
+| `CursorPosition` | Immutable `(column, row)` value                           |
+| `CharWidth`      | Static utility for wide character detection (CJK ranges)  |
 
 ## Design Decisions and Trade-Offs
 
@@ -92,11 +92,13 @@ Cell (immutable)
 ### ArrayList for screen, ArrayDeque for scrollback
 
 The **screen** uses `ArrayList<TerminalLine>` because:
+
 - Random access by row index is O(1), which is critical for cursor-addressed editing.
 - The number of rows is fixed (equals `height`), so no resizing during normal operations.
 - `remove(0)` during scroll-up is O(n) where n = height, but height is typically 24–50. For a production buffer an array-backed ring buffer would eliminate this cost, but the complexity isn't warranted here.
 
 The **scrollback** uses `ArrayDeque<TerminalLine>` because:
+
 - Lines are always added at one end (`addLast`) and evicted from the other (`removeFirst`), making it a natural FIFO/deque.
 - No indexed access is needed during normal operation (scrollback is read sequentially).
 - The `getScrollbackLineInternal` method iterates the deque for indexed access in content-access APIs, which is O(n) but acceptable for diagnostic/test reads.
