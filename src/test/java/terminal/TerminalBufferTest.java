@@ -845,4 +845,173 @@ class TerminalBufferTest {
             assertEquals(3, buf.getScrollbackSize());
         }
     }
+
+    // ========================================================================
+    // Edge cases
+    // ========================================================================
+
+    @Nested
+    class EdgeCases {
+
+        @Test
+        void minimumBuffer1x1() {
+            TerminalBuffer buf = new TerminalBuffer(1, 1, 0);
+            buf.writeText("A");
+            assertEquals("A", buf.getLine(0));
+            assertEquals(new CursorPosition(1, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void minimumBuffer1x1ScrollsOnSecondChar() {
+            TerminalBuffer buf = new TerminalBuffer(1, 1, 5);
+            buf.writeText("ABCDE");
+
+            assertEquals("E", buf.getLine(0));
+            assertEquals(4, buf.getScrollbackSize());
+            assertEquals("A", buf.getScrollbackLine(0));
+            assertEquals("D", buf.getScrollbackLine(3));
+        }
+
+        @Test
+        void zeroScrollbackNeverStoresHistory() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 0);
+            for (int i = 0; i < 10; i++) {
+                buf.insertEmptyLineAtBottom();
+            }
+            assertEquals(0, buf.getScrollbackSize());
+        }
+
+        @Test
+        void cursorAtLastCellThenWriteOneChar() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 0);
+            buf.setCursorPosition(4, 0);
+            buf.writeText("X");
+
+            assertEquals('X', buf.getCharAt(4, 0));
+            // Cursor should be at col 5 (past end), next write will wrap
+            assertEquals(new CursorPosition(5, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void cursorAtLastCellThenWriteTwoChars() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 0);
+            buf.setCursorPosition(4, 0);
+            buf.writeText("XY");
+
+            assertEquals('X', buf.getCharAt(4, 0));
+            assertEquals('Y', buf.getCharAt(0, 1));
+        }
+
+        @Test
+        void fillLineOnFreshBuffer() {
+            TerminalBuffer buf = new TerminalBuffer(3, 2, 0);
+            buf.fillLine('.');
+            assertEquals("...", buf.getLine(0));
+            assertEquals("", buf.getLine(1)); // other rows unaffected
+        }
+
+        @Test
+        void scrollbackFullThenClearScreenAndScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(3, 1, 2);
+            buf.writeText("AAABBBCCC"); // scrollback: [AAA, BBB], screen: CCC
+            assertEquals(2, buf.getScrollbackSize());
+
+            buf.clearScreenAndScrollback();
+            assertEquals(0, buf.getScrollbackSize());
+            assertEquals("", buf.getLine(0));
+        }
+
+        @Test
+        void setCursorPositionWithLargeNegativeValues() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setCursorPosition(-1000, -1000);
+            assertEquals(new CursorPosition(0, 0), buf.getCursorPosition());
+        }
+
+        @Test
+        void setCursorPositionWithLargePositiveValues() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.setCursorPosition(Integer.MAX_VALUE, Integer.MAX_VALUE);
+            assertEquals(new CursorPosition(9, 4), buf.getCursorPosition());
+        }
+
+        @Test
+        void writeTextAfterClearScreen() {
+            TerminalBuffer buf = new TerminalBuffer(10, 3, 0);
+            buf.writeText("Hello");
+            buf.clearScreen();
+            buf.writeText("World");
+            assertEquals("World", buf.getLine(0));
+        }
+
+        @Test
+        void multipleWritesOnDifferentLines() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            buf.writeText("Line0");
+            buf.setCursorPosition(0, 1);
+            buf.writeText("Line1");
+            buf.setCursorPosition(0, 2);
+            buf.writeText("Line2");
+
+            assertEquals("Line0", buf.getLine(0));
+            assertEquals("Line1", buf.getLine(1));
+            assertEquals("Line2", buf.getLine(2));
+        }
+
+        @Test
+        void insertTextShiftPreservesAttributes() {
+            TerminalBuffer buf = new TerminalBuffer(10, 5, 0);
+            TextAttributes bold = TextAttributes.DEFAULT.withStyle(StyleFlag.BOLD);
+            buf.setCurrentAttributes(bold);
+            buf.writeText("AB");
+
+            buf.setCursorPosition(1, 0);
+            buf.resetAttributes();
+            buf.insertText("X");
+
+            // Column 0: A (bold), Column 1: X (default), Column 2: B (bold)
+            assertTrue(buf.getAttributesAt(0, 0).hasStyle(StyleFlag.BOLD));
+            assertFalse(buf.getAttributesAt(1, 0).hasStyle(StyleFlag.BOLD));
+            assertTrue(buf.getAttributesAt(2, 0).hasStyle(StyleFlag.BOLD));
+        }
+
+        @Test
+        void getAllContentSingleLineNoScrollback() {
+            TerminalBuffer buf = new TerminalBuffer(10, 1, 0);
+            buf.writeText("Test");
+            assertEquals("Test", buf.getAllContent());
+        }
+
+        @Test
+        void screenContentOfBufferAfterHeavyScrolling() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 3);
+            // Write 25 chars = 5 full lines, in a 2-line screen with 3 scrollback
+            // Lines produced: AAAAA, BBBBB, CCCCC, DDDDD, EEEEE
+            // Screen holds 2, so 3 lines scroll off → exactly fits maxScrollback=3
+            buf.writeText("AAAAABBBBBCCCCCDDDDDEEEEE");
+
+            assertEquals("DDDDD", buf.getLine(0));
+            assertEquals("EEEEE", buf.getLine(1));
+
+            assertEquals(3, buf.getScrollbackSize());
+            assertEquals("AAAAA", buf.getScrollbackLine(0));
+            assertEquals("BBBBB", buf.getScrollbackLine(1));
+            assertEquals("CCCCC", buf.getScrollbackLine(2));
+        }
+
+        @Test
+        void scrollbackEvictionWithHeavyScrolling() {
+            TerminalBuffer buf = new TerminalBuffer(5, 2, 2);
+            // 5 full lines, screen=2, scrollback max=2 → oldest line evicted
+            buf.writeText("AAAAABBBBBCCCCCDDDDDEEEEE");
+
+            assertEquals("DDDDD", buf.getLine(0));
+            assertEquals("EEEEE", buf.getLine(1));
+
+            assertEquals(2, buf.getScrollbackSize());
+            // AAAAA was evicted since only 2 scrollback slots
+            assertEquals("BBBBB", buf.getScrollbackLine(0));
+            assertEquals("CCCCC", buf.getScrollbackLine(1));
+        }
+    }
 }
