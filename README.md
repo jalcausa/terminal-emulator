@@ -22,13 +22,29 @@ mvn test -Dtest="TerminalBufferTest\$Resize"
 
 ## Interactive Demo
 
-A `Demo` class is included to showcase the API in action — writing text, colored/styled output, CJK wide characters, scrolling, and resize:
+An interactive REPL is included to try the buffer from your terminal:
 
 ```bash
 mvn compile -q && java -cp target/classes terminal.Demo
 ```
 
-You can edit `src/main/java/terminal/Demo.java` to experiment with the API.
+Once running, type commands to interact with the buffer. After each command
+the buffer is rendered with ANSI colors and a visible cursor:
+
+```
+> write Hello, world!
+> fg red
+> bold
+> cursor 0 2
+> write This is bold red
+> fill =
+> scroll
+> resize 20 5
+> scrollback
+> info
+> help        (full command list)
+> quit
+```
 
 ## Architecture
 
